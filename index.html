@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Auto Flight Check-in — Hackathon Demo</title>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+
+<style>
+body { font-family:'Segoe UI',Roboto,sans-serif; background: linear-gradient(135deg,#0f172a,#1e40af,#3b82f6); min-height:100vh; display:flex; justify-content:center; align-items:center; padding:20px; color:#fff; }
+.container { background: rgba(255,255,255,0.12); backdrop-filter: blur(16px); border-radius:20px; padding:28px 32px; width:550px; box-shadow:0 16px 40px rgba(0,0,0,0.3); }
+h2 { text-align:center; margin-bottom:18px; font-size:1.9rem; }
+form input, form button { width:100%; padding:12px 14px; margin:6px 0; border-radius:10px; border:none; font-size:15px; }
+form input { background: rgba(255,255,255,0.9); color:#111; }
+button { background: linear-gradient(135deg,#3b82f6,#1e40af); color:#fff; font-weight:600; border:none; cursor:pointer; padding:12px; transition: all .25s ease; }
+button:hover { transform: scale(1.02); box-shadow:0 10px 25px rgba(0,0,0,0.2); }
+.booking { background:#fff; color:#111; padding:14px; margin-top:12px; border-radius:12px; display:flex; justify-content:space-between; align-items:center; }
+.right button { margin-top:5px; width:120px; }
+.toast-container { position:fixed; top:18px; right:18px; z-index:9999; display:flex; flex-direction:column; gap:10px; }
+.toast { background:#fff; color:#111; padding:10px 14px; border-radius:10px; box-shadow:0 6px 18px rgba(0,0,0,0.16); font-weight:700; animation:toastIn .5s, toastOut 5s linear forwards; }
+@keyframes toastIn { from {transform:translateX(30px); opacity:0} to {transform:translateX(0); opacity:1} }
+@keyframes toastOut { 0%{opacity:1} 85%{opacity:1} 100%{opacity:0; transform:translateX(30px)} }
+</style>
+</head>
+<body>
+
+<div class="container">
+<h2>✈️ Auto Flight Check-in</h2>
+
+<form id="flightForm">
+  <input id="flightNumber" placeholder="Flight Number (AI202)" required>
+  <input id="date" type="date" required>
+  <input id="email" type="email" placeholder="Passenger Email" required>
+  <input id="phone" placeholder="Phone (e.g., +91XXXXXXXXXX)" required>
+  <button type="submit">Save Flight</button>
+</form>
+
+<div id="bookings"></div>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+// Storage helpers
+function getBookings(){ return JSON.parse(localStorage.getItem('bookings')||'[]'); }
+function saveBookings(list){ localStorage.setItem('bookings', JSON.stringify(list)); }
+
+// Toast notifications
+function showToast(msg){ 
+  const c=document.getElementById('toastContainer'); 
+  const t=document.createElement('div'); 
+  t.className='toast'; 
+  t.textContent=msg; 
+  c.appendChild(t); 
+  setTimeout(()=>t.remove(),5000); 
+}
+
+// Render flights
+function renderBookings(){
+  const container = document.getElementById('bookings'); container.innerHTML='';
+  getBookings().forEach((b,i)=>{
+    const div=document.createElement('div'); div.className='booking';
+    div.innerHTML=`<div>
+      <strong>✈️ ${b.flightNumber}</strong> | ${b.date}<br>${b.email} | ${b.phone}<br>Status: ${b.status}
+    </div>
+    <div class="right">
+      <button onclick="deleteBooking(${i})">Delete</button>
+      <button onclick="generateBoardingPass(${i})">Boarding Pass</button>
+    </div>`;
+    container.appendChild(div);
+  });
+}
+
+// Add flight
+document.getElementById('flightForm').addEventListener('submit', e=>{
+  e.preventDefault();
+  const flight={ 
+    flightNumber:flightNumber.value,
+    date:date.value,
+    email:email.value,
+    phone:phone.value,
+    createdAt:Date.now(),
+    seat:`${Math.floor(Math.random()*30+1)}${['A','B','C','D','E','F'][Math.floor(Math.random()*6)]}`,
+    gate:`${String.fromCharCode(65+Math.floor(Math.random()*6))}${Math.floor(Math.random()*20+1)}`,
+    boardingTime:new Date(Date.now()+30*60000).toLocaleString(),
+    status:'saved'
+  };
+  const arr=getBookings(); arr.push(flight); saveBookings(arr); e.target.reset(); renderBookings();
+});
+
+// Delete flight
+function deleteBooking(i){ let b=getBookings(); b.splice(i,1); saveBookings(b); renderBookings(); }
+
+// Generate Boarding Pass PDF
+function generateBoardingPass(i){
+  const b = getBookings()[i];
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit:'pt', format:'A4' });
+  doc.setFillColor(245,245,245); doc.rect(40,50,520,220,'F');
+  doc.setFillColor(59,130,246); doc.rect(40,50,520,40,'F'); doc.setFontSize(20); doc.setTextColor(255,255,255);
+  doc.text("SKYWAY AIR",50,78);
+  doc.setFontSize(12); doc.setTextColor(0,0,0);
+  doc.text(`Passenger: ${b.email}`,50,110);
+  doc.text(`Phone: ${b.phone}`,50,130);
+  doc.text(`Flight: ${b.flightNumber}`,50,150);
+  doc.text(`Date: ${b.date}`,50,170);
+  doc.text(`Seat: ${b.seat}`,300,150);
+  doc.text(`Gate: ${b.gate}`,300,170);
+  doc.text(`Boarding: ${b.boardingTime}`,300,190);
+  const qr = new QRious({ value:`Flight:${b.flightNumber}|Email:${b.email}|Seat:${b.seat}`, size:80 });
+  doc.addImage(qr.toDataURL(),'PNG',450,130,70,70);
+  doc.setFontSize(10); doc.setTextColor(100); doc.text("Thank you for flying with Skyway Air",50,260);
+  doc.save(`BoardingPass_${b.flightNumber}.pdf`);
+}
+
+// --------- Notifications for status changes ---------
+setInterval(()=>{
+  let updated=false;
+  const flights = getBookings();
+  flights.forEach(f=>{
+    const age = Date.now() - f.createdAt;
+    if(age>15000 && f.status==='saved'){ f.status='boarding'; updated=true; showToast(`⚠️ Flight ${f.flightNumber} boarding soon`);}
+    if(age>30000 && f.status==='boarding'){ f.status='checked-in'; updated=true; showToast(`🎉 Flight ${f.flightNumber} checked-in automatically`);}
+  });
+  if(updated){ saveBookings(flights); renderBookings(); }
+},5000);
+
+renderBookings();
+</script>
+</body>
+</html>
